@@ -8,12 +8,14 @@
 
 #import "DropItViewController.h"
 #import "DropItBehaviour.h"
+#import "DropItBezierPathView.h"
 
 @interface DropItViewController () <UIDynamicAnimatorDelegate>
-@property (weak, nonatomic) IBOutlet UIView *gameView;
+@property (weak, nonatomic) IBOutlet DropItBezierPathView* gameView;
 @property (strong, nonatomic) UIDynamicAnimator* animator;
 @property (strong, nonatomic) DropItBehaviour* dropItBehaviour;
-
+@property (strong, nonatomic) UIAttachmentBehavior* attachmentBehaviour;
+@property (strong, nonatomic) UIView* droppingView;
 @end
 
 @implementation DropItViewController
@@ -91,6 +93,38 @@
     [self drop];
 }
 
+- (IBAction)pan:(UIPanGestureRecognizer *)sender {
+    CGPoint gesturePoint = [sender locationInView:self.gameView];
+    if (sender.state == UIGestureRecognizerStateBegan) {
+        [self attachDroppingViewToPoint:gesturePoint];
+    }
+    else if (sender.state == UIGestureRecognizerStateChanged) {
+        self.attachmentBehaviour.anchorPoint = gesturePoint;
+    }
+    else if (sender.state == UIGestureRecognizerStateEnded) {
+        [self.animator removeBehavior:self.attachmentBehaviour];
+        self.gameView.path = nil;
+    }
+}
+
+- (void) attachDroppingViewToPoint:(CGPoint) anchorPoint {
+    if (self.droppingView) {
+        self.attachmentBehaviour = [[UIAttachmentBehavior alloc] initWithItem:self.droppingView attachedToAnchor:anchorPoint];
+        UIView* droppingView = self.droppingView;
+        __weak typeof(self) weakSelf = self; // if you use a strong reference inside a block, ARC will keep a strong reference.
+        self.attachmentBehaviour.action = ^{
+            UIBezierPath* path = [[UIBezierPath alloc] init];
+            [path moveToPoint:weakSelf.attachmentBehaviour.anchorPoint];
+            [path addLineToPoint:droppingView.center];
+            if ([weakSelf.gameView isKindOfClass:[DropItBezierPathView class]]) {
+                weakSelf.gameView.path = path;
+            }
+        };
+        self.droppingView = nil;
+        [self.animator addBehavior:self.attachmentBehaviour];
+    }
+}
+
 static const CGSize DROP_SIZE={40,40};
 - (void) drop {
     CGRect frame;
@@ -103,6 +137,8 @@ static const CGSize DROP_SIZE={40,40};
     dropView.backgroundColor = [self randomColour];
     [self.gameView addSubview:dropView];
     [self.dropItBehaviour addItem:dropView];
+    
+    self.droppingView = dropView;
 }
 
 - (UIColor*) randomColour {
